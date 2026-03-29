@@ -9,9 +9,9 @@
 void sequential_compute(double *A, double *B, double *C, int n);
 void sequential_stream(double *A, double *B, double *C, int n);
 void sequential_barrier_heavy(double *A, int n);
-void kernel_compute(double *A, double *B, double *C, int n);
-void kernel_stream(double *A, double *B, double *C, int n);
-void kernel_barrier_heavy(double *A, int n);
+void parallel_compute(double *A, double *B, double *C, int n);
+void parallel_stream(double *A, double *B, double *C, int n);
+void parallel_barrier_heavy(double *A, int n);
 void check_result(double *sequential_result, double *parallel_result, int n);
 
 void sequential_compute(double *A, double *B, double *C, int n) {
@@ -27,38 +27,47 @@ void sequential_stream(double *A, double *B, double *C, int n) {
 }
 
 void sequential_barrier_heavy(double *A, int n) {
+	double *temp = (double*)calloc(n, sizeof(double));
+	memcpy((void *)temp, (void *) A, n * sizeof(double));
 	for (int s = 0; s < 200; s++) {
 		for (int i = 1; i < n-1; i++) {
-			A[i] = (A[i-1] + A[i] + A[i+1]) / 3.0;
+			temp[i] = (A[i-1] + A[i] + A[i+1]) / 3.0;
 		}
 	}
+	memcpy((void *)A, (void *) temp, n * sizeof(double));
+	free(temp);
 }
 
-void kernel_compute(double *A, double *B, double *C, int n) {
+void parallel_compute(double *A, double *B, double *C, int n) {
     #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         C[i] = A[i] * B[i] + sqrt(A[i]);
     }
 }
 
-void kernel_stream(double *A, double *B, double *C, int n) {
+void parallel_stream(double *A, double *B, double *C, int n) {
     #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         C[i] = A[i] + 0.5 * B[i];
     }
 }
 
-void kernel_barrier_heavy(double *A, int n) {
+void parallel_barrier_heavy(double *A, int n) {
+	double *p_temp = (double*)calloc(n, sizeof(double));
+	memcpy((void *)p_temp, (void *) A, n * sizeof(double));
+
     #pragma omp parallel
     {
         for (int s = 0; s < 200; s++) {
             #pragma omp for
             for (int i = 1; i < n-1; i++) {
-                A[i] = (A[i-1] + A[i] + A[i+1]) / 3.0;
+                p_temp[i] = (A[i-1] + A[i] + A[i+1]) / 3.0;
             }
             #pragma omp barrier
         }
     }
+    memcpy((void *)A, (void *)p_temp, n * sizeof(double));
+    free(p_temp);
 }
 
 void check_result(double *sequential_result, double *parallel_result, int n) {
@@ -104,15 +113,15 @@ int main(int argc, char* argv[]) {
 	switch(operation) {
 		case 0:
 			// Run parallel version
-			printf("Running compute kernel with %d threads...\n", threads);
+			printf("Running compute with %d threads...\n", threads);
 			start = omp_get_wtime();
 			omp_set_num_threads(threads);
-			kernel_compute(a, b, c, num);
+			parallel_compute(a, b, c, num);
 			end = omp_get_wtime();
 			parallel_time_taken = end - start;
 
 			// Run sequential version
-			printf("Running compute kernel sequentially\n");
+			printf("Running compute sequentially\n");
 			start = omp_get_wtime();
 			sequential_compute(a, b, sequential_result, num);
 			end = omp_get_wtime();
@@ -124,15 +133,15 @@ int main(int argc, char* argv[]) {
 			break;
 		case 1:
 			// Run parallel version
-			printf("Running stream kernel with %d threads...\n", threads);
+			printf("Running stream with %d threads...\n", threads);
 			start = omp_get_wtime();
 			omp_set_num_threads(threads);
-			kernel_stream(a, b, c, num);
+			parallel_stream(a, b, c, num);
 			end = omp_get_wtime();
 			parallel_time_taken = end - start;
 
 			// Run sequential version
-			printf("Running stream kernel sequentially\n");
+			printf("Running stream sequentially\n");
 			start = omp_get_wtime();
 			sequential_stream(a, b, sequential_result, num);
 			end = omp_get_wtime();
@@ -144,11 +153,12 @@ int main(int argc, char* argv[]) {
 			break;
 		case 2:
 			// Run parallel version
-			printf("Running barrier heavy kernel with %d threads...\n", threads);
+			printf("Running barrier heavy with %d threads...\n", threads);
 			memcpy(sequential_result, a, num * sizeof(double));
+
 			start = omp_get_wtime();
 			omp_set_num_threads(threads);
-			kernel_barrier_heavy(a, num);
+			parallel_barrier_heavy(a, num);
 			end = omp_get_wtime();
 			parallel_time_taken = end - start;
 			
