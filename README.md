@@ -19,6 +19,10 @@ Available Operations:
 
 `0=compute`, `1=stream`, and `2=barrier_heavy`
 
+Automation Commands:
+- operation number: 0, 1, or 2
+`python3 automation.py [operation number]`
+
 It should output something like
 
 ```
